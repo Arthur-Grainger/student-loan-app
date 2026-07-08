@@ -139,6 +139,26 @@
         r.invest.points[25].totalPaid > 0, r.invest.points[25].totalPaid);
     }
 
+    // --- pension deductions ---
+    {
+      const sac = Engine.simulate({ ...baseInputs, salary: 40000, spareMonthly: 0, lumpSum: 0, pensionPct: 10, pensionSacrifice: true });
+      const oth = Engine.simulate({ ...baseInputs, salary: 40000, spareMonthly: 0, lumpSum: 0, pensionPct: 10, pensionSacrifice: false });
+      report('Salary sacrifice lowers repayments: (36000−29385)×9%/12 = £49.61',
+        approx(sac.invest.points[1].totalPaid, 49.6125), sac.invest.points[1].totalPaid);
+      report('Net pay / relief-at-source leaves repayments unchanged: (40000−29385)×9%/12 = £79.61',
+        approx(oth.invest.points[1].totalPaid, 79.6125), oth.invest.points[1].totalPaid);
+
+      // sacrifice income must feed the Plan 2 interest bands as well as the 9% calc
+      const hi = Engine.simulate({ ...baseInputs, salary: 60000, spareMonthly: 0, lumpSum: 0, pensionPct: 40, pensionSacrifice: true });
+      const rate = Engine.planInterestRate(P.plan2, 36000, 1, 3.2);
+      const expectedBal = 48000 * (1 + rate / 100 / 12) - 49.6125;
+      report('Sacrificed income feeds Plan 2 interest bands (month-1 balance matches)',
+        approx(hi.invest.points[1].balance, expectedBal, 0.05),
+        hi.invest.points[1].balance + ' vs ' + expectedBal);
+      report('No pension fields at all behaves as 0% (backwards compatible)',
+        approx(Engine.simulate({ ...baseInputs, spareMonthly: 0, lumpSum: 0 }).invest.points[1].totalPaid, 42.1125));
+    }
+
     // --- already written off ---
     {
       const r = Engine.simulate({ ...baseInputs, plan: P.plan1, repayStartYear: 1998 });

@@ -60,11 +60,11 @@
   .pills input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: 2px; }
 
   .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px 20px; }
-  .field input[type="number"] {
+  .field input[type="number"], .field select {
     width: 100%; padding: 9px 11px; font-size: 15px; font-family: inherit;
     border: 1px solid var(--baseline); border-radius: 8px; background: var(--surface); color: var(--ink);
   }
-  .field input[type="number"]:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; border-color: var(--accent); }
+  .field input[type="number"]:focus-visible, .field select:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; border-color: var(--accent); }
   .help { font-size: 12px; color: var(--muted); margin-top: 4px; line-height: 1.4; }
 
   details.helper { margin-top: 10px; font-size: 13.5px; }
@@ -212,6 +212,19 @@
           <input id="rpi" type="number" inputmode="decimal" min="0" max="15" step="0.1" value="3.2">
           <div class="help">Drives loan interest and how fast repayment thresholds rise. Official rates currently use 3.2% (March 2025 RPI).</div>
         </div>
+        <div class="field">
+          <label for="pension">Pension contributions (% of salary)</label>
+          <input id="pension" type="number" inputmode="decimal" min="0" max="75" step="0.5" value="0">
+          <div class="help">Your own contributions, not your employer's.</div>
+        </div>
+        <div class="field">
+          <label for="pensionType">How your pension is paid</label>
+          <select id="pensionType">
+            <option value="sacrifice">Salary sacrifice / exchange</option>
+            <option value="other">Other (net pay or relief at source)</option>
+          </select>
+          <div class="help">Salary sacrifice lowers the pay your loan repayments are based on; other schemes don't change them.</div>
+        </div>
       </div>
       <p class="assumption-note">
         Loan interest follows the official formulas using your inflation figure: Plans 1, 4 and 5 charge RPI
@@ -219,6 +232,10 @@
         Plan 2 scales from RPI up to RPI&nbsp;+&nbsp;3% as income rises between £29,385 and £52,885.
         Postgraduate loans charge RPI&nbsp;+&nbsp;3%. Salary, thresholds and interest bands are uprated once a year.
         We assume investments sit in a stocks &amp; shares ISA, so returns are tax-free.
+        Income tax and National Insurance don't change this comparison — your spare cash and your loan
+        repayments both come out of post-tax pay under either strategy, so they cancel out. Pension
+        contributions matter only when paid by salary sacrifice, which lowers the pay used to work out
+        repayments and Plan 2 interest.
       </p>
     </details>
   </section>
@@ -349,9 +366,14 @@ const Engine = (() => {
   // sendSpareToLoan=false → spare money is invested from day one.
   // In both, once the loan is gone the freed-up mandatory repayments are invested,
   // so the two strategies stay comparable.
+  // Income tax and NI cancel out of the comparison (spare cash and repayments are
+  // both post-tax in every scenario, and ISA returns are tax-free). Pension only
+  // matters when paid by salary sacrifice, which lowers the pay that repayments
+  // and Plan 2 interest bands are calculated on.
   function runScenario(p) {
     const plan = p.plan;
     const mReturn = Math.pow(1 + p.investReturn / 100, 1 / 12) - 1;
+    const pensionFactor = p.pensionSacrifice ? 1 - (p.pensionPct || 0) / 100 : 1;
     let balance = p.balance0;
     let salary = p.salary0;
     let scale = 1;            // annual uprating of thresholds/bands
@@ -380,14 +402,15 @@ const Engine = (() => {
         scale *= 1 + p.thresholdGrowth / 100;
       }
       const threshold = plan.threshold * scale;
+      const loanIncome = salary * pensionFactor; // pay for student-loan purposes
       const mandatoryDue = (m > p.monthsUntilRepay)
-        ? Math.max(0, salary - threshold) * plan.repayRate / 12
+        ? Math.max(0, loanIncome - threshold) * plan.repayRate / 12
         : 0;
 
       let investThisMonth = 0;
 
       if (balance > 0) {
-        const annualRate = planInterestRate(plan, salary, scale, p.rpi);
+        const annualRate = planInterestRate(plan, loanIncome, scale, p.rpi);
         balance *= 1 + annualRate / 100 / 12;
 
         const pay = Math.min(balance, mandatoryDue);
@@ -460,7 +483,9 @@ const Engine = (() => {
       horizonMonths: monthsUntilWriteOff,
       salaryGrowth: inputs.salaryGrowth,
       thresholdGrowth: inputs.rpi,
-      investReturn: inputs.investReturn
+      investReturn: inputs.investReturn,
+      pensionPct: inputs.pensionPct || 0,
+      pensionSacrifice: !!inputs.pensionSacrifice
     };
 
     const overpay = runScenario({ ...base, sendSpareToLoan: true });
@@ -746,6 +771,8 @@ const Engine = (() => {
       lumpSum: num('lump', 0, 500000, 0),
       salaryGrowth: num('salGrowth', 0, 20, 3.5),
       investReturn: num('ret', 0, 20, 5),
+      pensionPct: num('pension', 0, 75, 0),
+      pensionSacrifice: $('pensionType').value === 'sacrifice',
       currentYear: CURRENT_YEAR
     };
   }
@@ -842,7 +869,19 @@ const Engine = (() => {
     body.textContent = '';
     const add = (txt) => { const p = document.createElement('p'); p.textContent = txt; body.appendChild(p); };
     const writeOffYear = yearOfMonth(res.monthsUntilWriteOff);
-    const ratePct = (Engine.planInterestRate(inputs.plan, inputs.salary, 1, inputs.rpi)).toFixed(1);
+    const loanIncomeNow = inputs.salary * (inputs.pensionSacrifice ? 1 - inputs.pensionPct / 100 : 1);
+    const ratePct = (Engine.planInterestRate(inputs.plan, loanIncomeNow, 1, inputs.rpi)).toFixed(1);
+    const mandNow = Math.max(0, loanIncomeNow - inputs.plan.threshold) * inputs.plan.repayRate / 12;
+    const sacrificeNote = (inputs.pensionSacrifice && inputs.pensionPct > 0)
+      ? ' Your ' + inputs.pensionPct + '% salary-sacrifice pension lowers the pay this is worked out on.' : '';
+
+    if (res.monthsUntilRepay > 0) {
+      add('Your repayments haven’t started yet — they begin from ' + inputs.repayStartYear + '. Interest is already being added, though, and the two strategies below start with your spare money today.');
+    } else if (mandNow > 0) {
+      add('Right now you repay about ' + fmtGBP(mandNow) + ' a month automatically (' + Math.round(inputs.plan.repayRate * 100) + '% of pay above the ' + fmtGBP(inputs.plan.threshold) + ' threshold).' + sacrificeNote + ' That happens under both strategies — the choice here is only about your spare money.');
+    } else {
+      add('You’re currently below the ' + fmtGBP(inputs.plan.threshold) + ' repayment threshold, so no repayments are being taken from your pay' + (sacrificeNote ? ' (partly because salary sacrifice lowers the pay this is judged on).' : '.') + ' Interest is still being added to the balance, though.');
+    }
 
     if (res.invest.writtenOff > 0 && res.overpay.writtenOff > 0) {
       add('On these numbers you never clear the loan — even with the extra payments — so ' + fmtGBP(res.overpay.writtenOff) + ' of debt would still be cancelled in ' + writeOffYear + '. Until then the loan behaves like an extra tax on income: what you owe doesn’t change what you repay each month. Every pound of voluntary overpayment goes to a balance that was going to be written off anyway.');
@@ -959,7 +998,7 @@ const Engine = (() => {
     clearTimeout(debounceTimer);
     debounceTimer = setTimeout(recompute, 120);
   }
-  document.querySelectorAll('input').forEach(el => {
+  document.querySelectorAll('input, select').forEach(el => {
     el.addEventListener('input', scheduleRecompute);
     el.addEventListener('change', scheduleRecompute);
   });
