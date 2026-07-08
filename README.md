@@ -39,48 +39,6 @@ All figures live in one clearly-marked block near the top of the `<script>` in
 Then open `tests/run-tests.html` (see below) — the threshold tests will tell you
 which expected values to bump.
 
-## Embedding in WordPress
-
-`index.html` must be hosted somewhere first (WordPress blocks `.html` uploads to
-the Media Library by default). Two easy options:
-
-1. **GitHub Pages (recommended, free)** — in this repo on github.com go to
-   *Settings → Pages*, set the source to the `main` branch, and the app will be
-   served at `https://<your-username>.github.io/student-loan-app/`.
-2. **Your own hosting** — upload `index.html` anywhere via your host's file
-   manager or FTP and use that URL.
-
-Then, in the WordPress editor, add a **Custom HTML block** to the page and paste:
-
-```html
-<div style="max-width:920px;margin:0 auto;">
-  <iframe id="slcalc"
-          src="https://arthur-grainger.github.io/student-loan-app/"
-          title="Student loan: overpay or invest?"
-          style="width:100%;border:0;display:block;" height="2400" loading="lazy"></iframe>
-</div>
-<script>
-window.addEventListener('message', function (e) {
-  if (e.data && e.data.type === 'slcalc-height') {
-    document.getElementById('slcalc').style.height = e.data.height + 'px';
-  }
-});
-</script>
-```
-
-**Centering**: the calculator centres itself inside the iframe (its content column
-is max 880px wide), and the wrapper `<div>` centres the iframe inside your page,
-so it stays centred whatever width your theme gives the content area. If the
-calculator looks squeezed into a narrow theme column, select the block in the
-WordPress editor and choose **Wide width** or **Full width** alignment (if your
-theme offers it) — the wrapper div will keep it centred.
-
-The `<script>` part is optional but recommended: the app reports its height to the
-parent page, so the iframe grows and shrinks to fit with no inner scrollbar. If
-your theme strips scripts, keep just the wrapper and `<iframe>` lines — the fixed
-`height="2400"` fallback still works. Because it's an iframe, your theme's CSS
-cannot break the app (and vice versa).
-
 ## How the comparison works
 
 Both strategies start from identical circumstances and get the same spare money:
