@@ -1,0 +1,993 @@
+<!DOCTYPE html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Student loan: overpay or invest?</title>
+<style>
+  :root {
+    --page:        #f9f9f7;
+    --surface:     #fcfcfb;
+    --ink:         #0b0b0b;
+    --ink-2:       #52514e;
+    --muted:       #898781;
+    --grid:        #e1e0d9;
+    --baseline:    #c3c2b7;
+    --border:      rgba(11,11,11,0.10);
+    --overpay:     #2a78d6;  /* categorical slot 1 (blue)  — "if you overpay" */
+    --invest:      #1baf7a;  /* categorical slot 2 (aqua)  — "if you invest"  */
+    --accent:      #2a78d6;
+    --accent-wash: #eaf2fc;
+    --invest-wash: #e4f4ed;
+    --good-text:   #006300;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: var(--page);
+    color: var(--ink);
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    font-size: 15px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+  .app { max-width: 880px; margin: 0 auto; padding: 20px 14px 32px; }
+
+  header.masthead { margin: 4px 2px 18px; }
+  header.masthead h1 { font-size: 23px; margin: 0 0 4px; letter-spacing: -0.01em; }
+  header.masthead p { margin: 0; color: var(--ink-2); font-size: 14px; max-width: 60ch; }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 18px 20px;
+    margin-bottom: 14px;
+  }
+
+  /* ---------- inputs ---------- */
+  fieldset { border: 0; padding: 0; margin: 0 0 16px; }
+  legend, .field > label { display: block; font-size: 13px; font-weight: 600; color: var(--ink-2); margin-bottom: 6px; padding: 0; }
+  .pills { display: flex; flex-wrap: wrap; gap: 8px; }
+  .pills label { cursor: pointer; }
+  .pills input { position: absolute; opacity: 0; pointer-events: none; }
+  .pills span {
+    display: inline-block; padding: 7px 14px; border-radius: 999px;
+    border: 1px solid var(--baseline); font-size: 14px; color: var(--ink-2);
+    background: var(--surface); transition: border-color .12s, background .12s;
+  }
+  .pills input:checked + span { border-color: var(--accent); background: var(--accent-wash); color: var(--ink); font-weight: 600; }
+  .pills input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px 20px; }
+  .field input[type="number"] {
+    width: 100%; padding: 9px 11px; font-size: 15px; font-family: inherit;
+    border: 1px solid var(--baseline); border-radius: 8px; background: var(--surface); color: var(--ink);
+  }
+  .field input[type="number"]:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; border-color: var(--accent); }
+  .help { font-size: 12px; color: var(--muted); margin-top: 4px; line-height: 1.4; }
+
+  details.helper { margin-top: 10px; font-size: 13.5px; }
+  details.helper summary { cursor: pointer; color: var(--accent); font-weight: 600; font-size: 13px; }
+  details.helper summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  details.helper ul { margin: 8px 0 4px; padding-left: 18px; color: var(--ink-2); }
+  details.helper li { margin: 3px 0; }
+  details.helper p { color: var(--ink-2); margin: 8px 0 4px; }
+  .assumption-note { font-size: 12px; color: var(--muted); margin-top: 12px; line-height: 1.45; }
+
+  /* ---------- verdict ---------- */
+  .kicker { font-size: 11px; font-weight: 700; letter-spacing: 0.09em; text-transform: uppercase; color: var(--muted); margin-bottom: 8px; }
+  .rec-chip { display: inline-block; padding: 3px 11px; border-radius: 999px; font-size: 12px; font-weight: 700; margin-bottom: 8px; }
+  .rec-chip.invest  { background: var(--invest-wash); color: #0a5c40; }
+  .rec-chip.overpay { background: var(--accent-wash); color: #1c5cab; }
+  .rec-chip.close   { background: #f0efec; color: var(--ink-2); }
+  .verdict h2 { font-size: 20px; margin: 0 0 10px; line-height: 1.35; letter-spacing: -0.01em; }
+  .hero { font-size: 46px; font-weight: 650; letter-spacing: -0.02em; line-height: 1.1; }
+  .hero-cap { font-size: 13px; color: var(--ink-2); margin-top: 4px; }
+  .tipping { font-size: 13.5px; color: var(--ink-2); border-top: 1px solid var(--border); margin: 14px 0 0; padding-top: 12px; }
+
+  /* ---------- summary table ---------- */
+  table.summary { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+  table.summary th { text-align: right; font-size: 11.5px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); font-weight: 700; padding: 4px 6px 8px; }
+  table.summary th:first-child, table.summary td:first-child { text-align: left; padding-left: 0; }
+  table.summary th .key, .legend .key { display: inline-block; width: 13px; height: 3px; border-radius: 2px; vertical-align: middle; margin-right: 6px; }
+  table.summary td { text-align: right; padding: 7px 6px; border-top: 1px solid var(--grid); font-variant-numeric: tabular-nums; }
+  table.summary td:first-child { color: var(--ink-2); font-variant-numeric: normal; }
+  table.summary td small { color: var(--muted); font-variant-numeric: normal; }
+
+  /* ---------- charts ---------- */
+  .chart-head h3 { font-size: 15px; margin: 0 0 2px; }
+  .chart-head .sub { font-size: 12.5px; color: var(--muted); margin: 0 0 10px; }
+  .legend { display: flex; gap: 16px; font-size: 12.5px; color: var(--ink-2); margin-bottom: 8px; flex-wrap: wrap; }
+  .legend .item { display: inline-flex; align-items: center; }
+  .chart { position: relative; }
+  .chart svg { display: block; width: 100%; }
+  .chart svg:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+  .tip {
+    position: absolute; z-index: 5; pointer-events: none; display: none;
+    background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+    padding: 8px 11px; box-shadow: 0 2px 10px rgba(11,11,11,0.08); min-width: 128px;
+  }
+  .tip .th { font-size: 11.5px; color: var(--muted); margin-bottom: 4px; }
+  .tip .row { display: flex; align-items: center; gap: 7px; margin: 2px 0; }
+  .tip .tk { width: 12px; height: 2.5px; border-radius: 2px; flex: 0 0 auto; }
+  .tip .tv { font-size: 13px; font-weight: 650; color: var(--ink); font-variant-numeric: tabular-nums; }
+  .tip .tn { font-size: 12px; color: var(--ink-2); }
+
+  /* ---------- meaning + data table ---------- */
+  #meaningBody p { margin: 8px 0; color: var(--ink-2); font-size: 14px; }
+  #meaningBody p:first-child { margin-top: 0; }
+  details.table-details summary { cursor: pointer; font-weight: 600; font-size: 14px; color: var(--accent); }
+  details.table-details summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .tbl-scroll { overflow-x: auto; margin-top: 10px; }
+  table.yearly { border-collapse: collapse; font-size: 12.5px; width: 100%; min-width: 560px; }
+  table.yearly th { font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); text-align: right; padding: 4px 8px 6px; font-weight: 700; }
+  table.yearly th:first-child, table.yearly td:first-child { text-align: left; padding-left: 0; }
+  table.yearly td { text-align: right; padding: 4px 8px; border-top: 1px solid var(--grid); font-variant-numeric: tabular-nums; color: var(--ink-2); }
+  table.yearly td:first-child { color: var(--ink); }
+
+  .notice { color: var(--ink-2); font-size: 14.5px; }
+
+  footer.small { font-size: 12px; color: var(--muted); margin: 18px 4px 0; line-height: 1.55; }
+  footer.small a { color: var(--muted); }
+
+  @media (max-width: 620px) {
+    .grid2 { grid-template-columns: 1fr; }
+    .hero { font-size: 36px; }
+    .card { padding: 15px 15px; }
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="masthead">
+    <h1>Student loan: overpay or invest?</h1>
+    <p>Should spare money go into paying off your UK student loan early, or into investments like a stocks &amp; shares ISA? Enter your details and this tool simulates both futures, month by month, until your loan is repaid or written off.</p>
+  </header>
+
+  <section class="card" aria-label="Your details">
+    <fieldset>
+      <legend>Your loan plan</legend>
+      <div class="pills" role="radiogroup" aria-label="Loan plan">
+        <label><input type="radio" name="plan" value="plan1"><span>Plan 1</span></label>
+        <label><input type="radio" name="plan" value="plan2" checked><span>Plan 2</span></label>
+        <label><input type="radio" name="plan" value="plan4"><span>Plan 4 (Scotland)</span></label>
+        <label><input type="radio" name="plan" value="plan5"><span>Plan 5</span></label>
+        <label><input type="radio" name="plan" value="postgrad"><span>Postgraduate</span></label>
+      </div>
+      <details class="helper">
+        <summary>Not sure which plan you're on?</summary>
+        <ul>
+          <li><strong>Plan 1</strong> — started university before September 2012 (England or Wales), or any Northern Ireland loan</li>
+          <li><strong>Plan 2</strong> — started September 2012 to July 2023 (England or Wales)</li>
+          <li><strong>Plan 4</strong> — Scottish loan (SAAS)</li>
+          <li><strong>Plan 5</strong> — started August 2023 or later (England)</li>
+          <li><strong>Postgraduate</strong> — master's or doctoral loan (England or Wales)</li>
+        </ul>
+        <p>You can check on your <a href="https://www.gov.uk/repaying-your-student-loan/which-repayment-plan-you-are-on" target="_blank" rel="noopener">gov.uk student loan account</a>.</p>
+      </details>
+    </fieldset>
+
+    <div class="grid2">
+      <div class="field">
+        <label for="balance">Loan balance today (£)</label>
+        <input id="balance" type="number" inputmode="numeric" min="0" max="500000" step="500" value="48000">
+        <div class="help">Check your online account at gov.uk or your latest SLC statement.</div>
+      </div>
+      <div class="field">
+        <label for="salary">Salary before tax (£ per year)</label>
+        <input id="salary" type="number" inputmode="numeric" min="0" max="1000000" step="500" value="35000">
+      </div>
+      <div class="field">
+        <label for="startYear">Year your repayments started (or will start)</label>
+        <input id="startYear" type="number" inputmode="numeric" min="1985" max="2032" step="1" value="2019">
+        <div class="help">The April after you finished your course. This sets when your loan is written off.</div>
+      </div>
+      <div class="field">
+        <label for="spare">Spare money each month (£)</label>
+        <input id="spare" type="number" inputmode="numeric" min="0" max="10000" step="10" value="100">
+        <div class="help">The money you're deciding what to do with.</div>
+      </div>
+    </div>
+
+    <details class="helper" id="advanced">
+      <summary>Adjust assumptions (optional)</summary>
+      <div class="grid2" style="margin-top:10px">
+        <div class="field">
+          <label for="lump">One-off lump sum today (£)</label>
+          <input id="lump" type="number" inputmode="numeric" min="0" max="500000" step="100" value="0">
+          <div class="help">Money you could pay off (or invest) right now, on top of the monthly amount.</div>
+        </div>
+        <div class="field">
+          <label for="ret">Investment return (% per year)</label>
+          <input id="ret" type="number" inputmode="decimal" min="0" max="20" step="0.1" value="5">
+          <div class="help">After fees. Global stock markets have averaged roughly 5–8% a year over long periods — but past performance doesn't guarantee the future.</div>
+        </div>
+        <div class="field">
+          <label for="salGrowth">Salary growth (% per year)</label>
+          <input id="salGrowth" type="number" inputmode="decimal" min="0" max="20" step="0.1" value="3.5">
+        </div>
+        <div class="field">
+          <label for="rpi">Future inflation, RPI (% per year)</label>
+          <input id="rpi" type="number" inputmode="decimal" min="0" max="15" step="0.1" value="3.2">
+          <div class="help">Drives loan interest and how fast repayment thresholds rise. Official rates currently use 3.2% (March 2025 RPI).</div>
+        </div>
+      </div>
+      <p class="assumption-note">
+        Loan interest follows the official formulas using your inflation figure: Plans 1, 4 and 5 charge RPI
+        (Plans 1 and 4 are capped at 1% above the Bank of England base rate when that's lower).
+        Plan 2 scales from RPI up to RPI&nbsp;+&nbsp;3% as income rises between £29,385 and £52,885.
+        Postgraduate loans charge RPI&nbsp;+&nbsp;3%. Salary, thresholds and interest bands are uprated once a year.
+        We assume investments sit in a stocks &amp; shares ISA, so returns are tax-free.
+      </p>
+    </details>
+  </section>
+
+  <div class="card notice" id="noticeCard" hidden></div>
+
+  <section id="results" aria-live="polite">
+    <div class="card verdict">
+      <div class="kicker">Our verdict</div>
+      <div><span class="rec-chip" id="recChip"></span></div>
+      <h2 id="verdictHead"></h2>
+      <div class="hero" id="verdictHero"></div>
+      <div class="hero-cap" id="verdictHeroCap"></div>
+      <p class="tipping" id="tippingLine"></p>
+    </div>
+
+    <div class="card">
+      <table class="summary" id="summaryTable"></table>
+    </div>
+
+    <div class="card chart-card">
+      <div class="chart-head">
+        <h3>Your loan, either way</h3>
+        <p class="sub">Projected balance until it's repaid or written off</p>
+      </div>
+      <div class="legend" id="loanLegend"></div>
+      <div class="chart" id="loanChart"></div>
+    </div>
+
+    <div class="card chart-card">
+      <div class="chart-head">
+        <h3>Your wealth, either way</h3>
+        <p class="sub">What your spare money grows into under each choice (freed-up repayments are invested too)</p>
+      </div>
+      <div class="legend" id="wealthLegend"></div>
+      <div class="chart" id="wealthChart"></div>
+    </div>
+
+    <div class="card chart-card">
+      <div class="chart-head">
+        <h3>The bottom line</h3>
+        <p class="sub" id="bottomSub"></p>
+      </div>
+      <div class="legend" id="totalsLegend"></div>
+      <div class="chart" id="totalsChart"></div>
+    </div>
+
+    <div class="card">
+      <h3 style="font-size:15px;margin:0 0 6px">What this means</h3>
+      <div id="meaningBody"></div>
+    </div>
+
+    <details class="card table-details">
+      <summary>See the year-by-year numbers</summary>
+      <div class="tbl-scroll">
+        <table class="yearly" id="yearlyTable"></table>
+      </div>
+    </details>
+  </section>
+
+  <footer class="small">
+    <p id="ratesLine"></p>
+    <p>This is a simplified projection in cash terms, not financial advice. Investment returns are not guaranteed and can be negative; loan rules and rates can change. Before overpaying or investing, it usually pays to clear expensive debt, keep an emergency fund, and take any employer pension match first. Sources:
+      <a href="https://www.gov.uk/repaying-your-student-loan/what-you-pay" target="_blank" rel="noopener">gov.uk — what you repay</a> ·
+      <a href="https://www.gov.uk/government/publications/student-loans-a-guide-to-terms-and-conditions" target="_blank" rel="noopener">loan terms &amp; conditions</a>.</p>
+  </footer>
+</div>
+
+<script>
+'use strict';
+
+/* ================================================================== */
+/* =====================  CONFIG START  ============================= */
+/* Update these each April (thresholds) and September (RPI).          */
+/* Everything else derives from this block.                           */
+/* ================================================================== */
+const RATES_CONFIG = {
+  taxYear: '2026/27',
+  lastVerified: 'July 2026',
+  currentRPI: 3.2, // set each September from the previous March's RPI
+  plans: {
+    plan1: {
+      label: 'Plan 1', threshold: 26900, repayRate: 0.09, writeOffYears: 25,
+      interest: { type: 'rpi' } // capped at base rate + 1% when lower; we assume RPI applies
+    },
+    plan2: {
+      label: 'Plan 2', threshold: 29385, repayRate: 0.09, writeOffYears: 30,
+      interest: { type: 'rpi-sliding', spread: 3, lowerIncome: 29385, upperIncome: 52885 }
+    },
+    plan4: {
+      label: 'Plan 4', threshold: 33795, repayRate: 0.09, writeOffYears: 30,
+      interest: { type: 'rpi' }
+    },
+    plan5: {
+      label: 'Plan 5', threshold: 25000, repayRate: 0.09, writeOffYears: 40,
+      interest: { type: 'rpi' }
+    },
+    postgrad: {
+      label: 'Postgraduate', threshold: 21000, repayRate: 0.06, writeOffYears: 30,
+      interest: { type: 'rpi-plus', spread: 3 }
+    }
+  }
+};
+/* =====================  CONFIG END  =============================== */
+
+/* ================================================================== */
+/* =====================  ENGINE START  ============================= */
+/* Pure functions only — no DOM. Testable outside the page.           */
+/* ================================================================== */
+const Engine = (() => {
+
+  // Annual interest rate (%) for a plan at a given income.
+  // bandScale uprates the Plan 2 income bands with inflation over time.
+  function planInterestRate(plan, income, bandScale, rpi) {
+    const it = plan.interest;
+    if (it.type === 'rpi') return rpi;
+    if (it.type === 'rpi-plus') return rpi + it.spread;
+    // rpi-sliding (Plan 2)
+    const lower = it.lowerIncome * bandScale;
+    const upper = it.upperIncome * bandScale;
+    if (income <= lower) return rpi;
+    if (income >= upper) return rpi + it.spread;
+    return rpi + it.spread * (income - lower) / (upper - lower);
+  }
+
+  // Simulate one strategy month by month.
+  // sendSpareToLoan=true  → spare money (and lump sum) go into the loan while it exists.
+  // sendSpareToLoan=false → spare money is invested from day one.
+  // In both, once the loan is gone the freed-up mandatory repayments are invested,
+  // so the two strategies stay comparable.
+  function runScenario(p) {
+    const plan = p.plan;
+    const mReturn = Math.pow(1 + p.investReturn / 100, 1 / 12) - 1;
+    let balance = p.balance0;
+    let salary = p.salary0;
+    let scale = 1;            // annual uprating of thresholds/bands
+    let pot = 0;              // invested wealth
+    let totalPaid = 0;        // everything sent to the SLC (mandatory + voluntary)
+    let writtenOff = 0;
+    let loanEndMonth = null;
+
+    // one-off lump sum at month 0
+    if (p.lumpSum > 0) {
+      if (p.sendSpareToLoan && balance > 0) {
+        const pay = Math.min(balance, p.lumpSum);
+        balance -= pay; totalPaid += pay;
+        pot += p.lumpSum - pay;
+      } else {
+        pot += p.lumpSum;
+      }
+    }
+    if (balance <= 0.005) { balance = 0; loanEndMonth = 0; }
+
+    const points = [{ m: 0, balance, pot, totalPaid }];
+
+    for (let m = 1; m <= p.horizonMonths; m++) {
+      if (m % 12 === 0) {
+        salary *= 1 + p.salaryGrowth / 100;
+        scale *= 1 + p.thresholdGrowth / 100;
+      }
+      const threshold = plan.threshold * scale;
+      const mandatoryDue = (m > p.monthsUntilRepay)
+        ? Math.max(0, salary - threshold) * plan.repayRate / 12
+        : 0;
+
+      let investThisMonth = 0;
+
+      if (balance > 0) {
+        const annualRate = planInterestRate(plan, salary, scale, p.rpi);
+        balance *= 1 + annualRate / 100 / 12;
+
+        const pay = Math.min(balance, mandatoryDue);
+        balance -= pay; totalPaid += pay;
+        investThisMonth += mandatoryDue - pay; // freed cash when the loan is nearly gone
+
+        if (p.sendSpareToLoan && balance > 0) {
+          const over = Math.min(balance, p.spareMonthly);
+          balance -= over; totalPaid += over;
+          investThisMonth += p.spareMonthly - over;
+        } else {
+          investThisMonth += p.spareMonthly;
+        }
+
+        if (balance <= 0.005) { balance = 0; if (loanEndMonth === null) loanEndMonth = m; }
+        if (balance > 0 && m === p.monthsUntilWriteOff) {
+          writtenOff = balance;
+          balance = 0;
+          if (loanEndMonth === null) loanEndMonth = m;
+        }
+      } else {
+        investThisMonth += p.spareMonthly + mandatoryDue; // loan gone: it all gets invested
+      }
+
+      pot = pot * (1 + mReturn) + investThisMonth;
+      points.push({ m, balance, pot, totalPaid });
+    }
+
+    if (loanEndMonth === null) loanEndMonth = p.horizonMonths;
+    return { points, totalPaid, writtenOff, loanEndMonth };
+  }
+
+  // Investment return (% / yr) at which the two strategies come out equal.
+  // null      → overpaying can never win (even a 0% return beats it)
+  // Infinity  → overpaying wins even against a 20%/yr return
+  function breakEvenReturn(base) {
+    const diffAt = (r) => {
+      const a = runScenario({ ...base, investReturn: r, sendSpareToLoan: true });
+      const b = runScenario({ ...base, investReturn: r, sendSpareToLoan: false });
+      const H = Math.max(a.loanEndMonth, b.loanEndMonth);
+      return a.points[H].pot - b.points[H].pot;
+    };
+    if (diffAt(0) <= 0) return null;
+    if (diffAt(20) > 0) return Infinity;
+    let lo = 0, hi = 20;
+    for (let i = 0; i < 30; i++) {
+      const mid = (lo + hi) / 2;
+      if (diffAt(mid) > 0) lo = mid; else hi = mid;
+    }
+    return (lo + hi) / 2;
+  }
+
+  // inputs: { plan, rpi, balance, salary, repayStartYear, currentYear,
+  //           spareMonthly, lumpSum, salaryGrowth, investReturn }
+  function simulate(inputs) {
+    const plan = inputs.plan;
+    const monthsUntilRepay = Math.max(0, (inputs.repayStartYear - inputs.currentYear) * 12);
+    const monthsUntilWriteOff = (inputs.repayStartYear + plan.writeOffYears - inputs.currentYear) * 12;
+    if (monthsUntilWriteOff <= 0) return { alreadyWrittenOff: true };
+
+    const base = {
+      plan,
+      rpi: inputs.rpi,
+      balance0: inputs.balance,
+      salary0: inputs.salary,
+      spareMonthly: inputs.spareMonthly,
+      lumpSum: inputs.lumpSum,
+      monthsUntilRepay,
+      monthsUntilWriteOff,
+      horizonMonths: monthsUntilWriteOff,
+      salaryGrowth: inputs.salaryGrowth,
+      thresholdGrowth: inputs.rpi,
+      investReturn: inputs.investReturn
+    };
+
+    const overpay = runScenario({ ...base, sendSpareToLoan: true });
+    const invest = runScenario({ ...base, sendSpareToLoan: false });
+    const horizon = Math.max(overpay.loanEndMonth, invest.loanEndMonth);
+    const wealthDiff = overpay.points[horizon].pot - invest.points[horizon].pot;
+
+    return {
+      alreadyWrittenOff: false,
+      overpay, invest, horizon, wealthDiff,
+      monthsUntilRepay, monthsUntilWriteOff,
+      breakEven: breakEvenReturn(base)
+    };
+  }
+
+  return { planInterestRate, runScenario, breakEvenReturn, simulate };
+})();
+/* =====================  ENGINE END  =============================== */
+
+/* ================================================================== */
+/* =====================  UI + CHARTS  ============================== */
+/* ================================================================== */
+(() => {
+  const SCEN = [
+    { key: 'overpay', name: 'If you overpay', color: '#2a78d6' },
+    { key: 'invest',  name: 'If you invest',  color: '#1baf7a' }
+  ];
+  const START = new Date();
+  const CURRENT_YEAR = START.getFullYear();
+
+  const $ = (id) => document.getElementById(id);
+  const GBP0 = new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'GBP', maximumFractionDigits: 0 });
+  const fmtGBP = (v) => GBP0.format(Math.round(v));
+  const fmtRough = (v) => GBP0.format(v >= 10000 ? Math.round(v / 100) * 100 : Math.round(v / 10) * 10);
+  const fmtAxis = (v) => {
+    if (v >= 1e6) return '£' + (Math.round(v / 1e5) / 10) + 'm';
+    if (v >= 1e3) return '£' + Math.round(v / 1e3) + 'k';
+    return '£' + Math.round(v);
+  };
+  const monthLabel = (m) => new Date(CURRENT_YEAR, START.getMonth() + m)
+    .toLocaleDateString('en-GB', { month: 'short', year: 'numeric' });
+  const yearOfMonth = (m) => new Date(CURRENT_YEAR, START.getMonth() + m).getFullYear();
+
+  const SVG_NS = 'http://www.w3.org/2000/svg';
+  function svgEl(tag, attrs) {
+    const e = document.createElementNS(SVG_NS, tag);
+    for (const k in attrs) e.setAttribute(k, attrs[k]);
+    return e;
+  }
+  function textEl(tag, attrs, content) {
+    const e = svgEl(tag, attrs);
+    e.textContent = content;
+    return e;
+  }
+  function niceCeil(v) {
+    if (v <= 0) return 1;
+    const pow = Math.pow(10, Math.floor(Math.log10(v)));
+    for (const s of [1, 1.5, 2, 2.5, 3, 4, 5, 6, 8, 10]) {
+      if (s * pow >= v) return s * pow;
+    }
+    return 10 * pow;
+  }
+
+  /* ------------------ line chart ------------------ */
+  // spec: { series: [{name,color,values:[Number]}], months, marker: {m,label}|null, yFormat, ariaLabel }
+  function renderLineChart(host, spec) {
+    host.textContent = '';
+    const width = Math.max(280, host.clientWidth || 600);
+    const H = 260;
+    const M = { top: 18, right: 64, bottom: 26, left: 46 };
+    const plotW = width - M.left - M.right;
+    const plotH = H - M.top - M.bottom;
+    const months = spec.months;
+
+    const yMaxRaw = Math.max(1, ...spec.series.map(s => Math.max(...s.values)));
+    const yMax = niceCeil(yMaxRaw);
+    const X = (m) => M.left + (m / months) * plotW;
+    const Y = (v) => M.top + plotH - (v / yMax) * plotH;
+
+    const svg = svgEl('svg', {
+      viewBox: `0 0 ${width} ${H}`, width, height: H,
+      role: 'img', tabindex: '0', 'aria-label': spec.ariaLabel
+    });
+
+    // horizontal gridlines + y ticks (4 steps)
+    for (let i = 1; i <= 4; i++) {
+      const v = (yMax / 4) * i;
+      svg.appendChild(svgEl('line', { x1: M.left, x2: M.left + plotW, y1: Y(v), y2: Y(v), stroke: '#e1e0d9', 'stroke-width': 1 }));
+      svg.appendChild(textEl('text', { x: M.left - 7, y: Y(v) + 3.5, 'text-anchor': 'end', 'font-size': 11, fill: '#898781', style: 'font-variant-numeric: tabular-nums' }, fmtAxis(v)));
+    }
+    // baseline
+    svg.appendChild(svgEl('line', { x1: M.left, x2: M.left + plotW, y1: Y(0), y2: Y(0), stroke: '#c3c2b7', 'stroke-width': 1 }));
+
+    // x ticks at clean year steps
+    const totalYears = months / 12;
+    const yearStep = [1, 2, 5, 10].find(s => totalYears / s <= 8) || 10;
+    for (let y = 0; y <= totalYears + 0.001; y += yearStep) {
+      const m = Math.round(y * 12);
+      if (m > months) break;
+      svg.appendChild(textEl('text', { x: X(m), y: H - 8, 'text-anchor': 'middle', 'font-size': 11, fill: '#898781', style: 'font-variant-numeric: tabular-nums' }, String(yearOfMonth(m))));
+    }
+
+    // event marker (write-off)
+    if (spec.marker && spec.marker.m <= months) {
+      const mx = X(spec.marker.m);
+      svg.appendChild(svgEl('line', { x1: mx, x2: mx, y1: M.top - 4, y2: M.top + plotH, stroke: '#c3c2b7', 'stroke-width': 1 }));
+      svg.appendChild(textEl('text', { x: mx, y: M.top - 8, 'text-anchor': mx > width - 90 ? 'end' : 'middle', 'font-size': 10.5, fill: '#898781' }, spec.marker.label));
+    }
+
+    // series lines
+    spec.series.forEach(s => {
+      const pts = s.values.map((v, m) => `${X(m).toFixed(1)},${Y(v).toFixed(1)}`).join(' ');
+      svg.appendChild(svgEl('polyline', { points: pts, fill: 'none', stroke: s.color, 'stroke-width': 2, 'stroke-linejoin': 'round', 'stroke-linecap': 'round' }));
+    });
+
+    // end dots + selective end labels (value only; names live in the legend)
+    const ends = spec.series.map(s => ({ s, y: Y(s.values[months]), v: s.values[months] }));
+    // nudge collided labels apart, keeping vertical order
+    const sorted = [...ends].sort((a, b) => a.y - b.y);
+    for (let i = 1; i < sorted.length; i++) {
+      if (sorted[i].labelY === undefined) sorted[i].labelY = sorted[i].y;
+      if (sorted[0].labelY === undefined) sorted[0].labelY = sorted[0].y;
+      if (sorted[i].labelY - sorted[i - 1].labelY < 15) sorted[i].labelY = sorted[i - 1].labelY + 15;
+    }
+    ends.forEach(e => { if (e.labelY === undefined) e.labelY = e.y; });
+    ends.forEach(e => {
+      const ex = X(months);
+      svg.appendChild(svgEl('circle', { cx: ex, cy: e.y, r: 4, fill: e.s.color, stroke: '#fcfcfb', 'stroke-width': 2 }));
+      if (Math.abs(e.labelY - e.y) > 6) {
+        svg.appendChild(svgEl('line', { x1: ex + 5, x2: ex + 9, y1: e.y, y2: e.labelY, stroke: '#c3c2b7', 'stroke-width': 1 }));
+      }
+      svg.appendChild(textEl('text', { x: ex + 11, y: e.labelY + 3.5, 'font-size': 11.5, 'font-weight': 600, fill: '#0b0b0b', style: 'font-variant-numeric: tabular-nums' }, fmtAxis(e.v)));
+    });
+
+    // ---- hover layer: crosshair + one tooltip listing every series ----
+    const cross = svgEl('line', { x1: 0, x2: 0, y1: M.top, y2: M.top + plotH, stroke: '#898781', 'stroke-width': 1, visibility: 'hidden' });
+    svg.appendChild(cross);
+    const dots = spec.series.map(s => {
+      const d = svgEl('circle', { r: 3.5, fill: s.color, stroke: '#fcfcfb', 'stroke-width': 2, visibility: 'hidden' });
+      svg.appendChild(d);
+      return d;
+    });
+
+    const tip = document.createElement('div');
+    tip.className = 'tip';
+    const tipHead = document.createElement('div'); tipHead.className = 'th';
+    tip.appendChild(tipHead);
+    const tipRows = spec.series.map(s => {
+      const row = document.createElement('div'); row.className = 'row';
+      const k = document.createElement('span'); k.className = 'tk'; k.style.background = s.color;
+      const v = document.createElement('span'); v.className = 'tv';
+      const n = document.createElement('span'); n.className = 'tn'; n.textContent = s.name;
+      row.append(k, v, n); tip.appendChild(row);
+      return v;
+    });
+    host.appendChild(tip);
+
+    function showAt(m) {
+      m = Math.max(0, Math.min(months, m));
+      const px = X(m);
+      cross.setAttribute('x1', px); cross.setAttribute('x2', px);
+      cross.setAttribute('visibility', 'visible');
+      spec.series.forEach((s, i) => {
+        dots[i].setAttribute('cx', px);
+        dots[i].setAttribute('cy', Y(s.values[m]));
+        dots[i].setAttribute('visibility', 'visible');
+        tipRows[i].textContent = fmtGBP(s.values[m]);
+      });
+      tipHead.textContent = monthLabel(m);
+      tip.style.display = 'block';
+      const hostW = host.clientWidth;
+      const scale = hostW / width; // svg is responsive; map svg coords to css px
+      const cssX = px * scale;
+      const tw = tip.offsetWidth;
+      tip.style.left = (cssX + 14 + tw > hostW ? cssX - tw - 12 : cssX + 12) + 'px';
+      tip.style.top = '18px';
+      return m;
+    }
+    function hide() {
+      cross.setAttribute('visibility', 'hidden');
+      dots.forEach(d => d.setAttribute('visibility', 'hidden'));
+      tip.style.display = 'none';
+    }
+
+    let kbIndex = months;
+    svg.addEventListener('pointermove', (ev) => {
+      const r = svg.getBoundingClientRect();
+      const frac = (ev.clientX - r.left) / r.width;
+      kbIndex = showAt(Math.round(((frac * width) - M.left) / plotW * months));
+    });
+    svg.addEventListener('pointerleave', hide);
+    svg.addEventListener('focus', () => { kbIndex = showAt(kbIndex); });
+    svg.addEventListener('blur', hide);
+    svg.addEventListener('keydown', (ev) => {
+      if (ev.key === 'ArrowLeft') { kbIndex = showAt(kbIndex - 12); ev.preventDefault(); }
+      else if (ev.key === 'ArrowRight') { kbIndex = showAt(kbIndex + 12); ev.preventDefault(); }
+      else if (ev.key === 'Home') { kbIndex = showAt(0); ev.preventDefault(); }
+      else if (ev.key === 'End') { kbIndex = showAt(months); ev.preventDefault(); }
+      else if (ev.key === 'Escape') hide();
+    });
+
+    host.appendChild(svg);
+  }
+
+  /* ------------------ comparison bars ------------------ */
+  // groups: [{label, rows: [{name,color,value}]}]
+  function renderBars(host, groups, ariaLabel) {
+    host.textContent = '';
+    const width = Math.max(280, host.clientWidth || 600);
+    const barH = 16, gap = 2, groupPad = 30, labelH = 20;
+    const M = { left: 4, right: 84 };
+    const plotW = width - M.left - M.right;
+    const maxV = Math.max(1, ...groups.flatMap(g => g.rows.map(r => r.value)));
+
+    let y = 6;
+    const parts = [];
+    groups.forEach(g => {
+      parts.push({ type: 'label', y: y + 13, text: g.label });
+      y += labelH;
+      g.rows.forEach(r => {
+        parts.push({ type: 'bar', y, row: r });
+        y += barH + gap;
+      });
+      y += groupPad - gap;
+    });
+    const H = y;
+
+    const svg = svgEl('svg', { viewBox: `0 0 ${width} ${H}`, width, height: H, role: 'img', 'aria-label': ariaLabel });
+
+    // rounded at the data end (right), square at the baseline (left)
+    function barPath(x, y0, w, h) {
+      const r = Math.min(4, w, h / 2);
+      return `M${x},${y0} h${Math.max(0, w - r)} a${r},${r} 0 0 1 ${r},${r} v${h - 2 * r} a${r},${r} 0 0 1 -${r},${r} h${-Math.max(0, w - r)} z`;
+    }
+
+    parts.forEach(p => {
+      if (p.type === 'label') {
+        svg.appendChild(textEl('text', { x: M.left, y: p.y, 'font-size': 12.5, 'font-weight': 600, fill: '#52514e' }, p.text));
+      } else {
+        const w = (p.row.value / maxV) * plotW;
+        if (w > 0.5) {
+          svg.appendChild(svgEl('path', { d: barPath(M.left, p.y, w, barH), fill: p.row.color }));
+        }
+        svg.appendChild(textEl('text', {
+          x: M.left + w + 8, y: p.y + barH / 2 + 4,
+          'font-size': 12, 'font-weight': 600, fill: '#0b0b0b',
+          style: 'font-variant-numeric: tabular-nums'
+        }, fmtGBP(p.row.value)));
+      }
+    });
+
+    host.appendChild(svg);
+  }
+
+  /* ------------------ legends ------------------ */
+  function renderLegend(host) {
+    host.textContent = '';
+    SCEN.forEach(s => {
+      const item = document.createElement('span'); item.className = 'item';
+      const k = document.createElement('span'); k.className = 'key'; k.style.background = s.color;
+      item.appendChild(k);
+      item.appendChild(document.createTextNode(s.name));
+      host.appendChild(item);
+    });
+  }
+
+  /* ------------------ inputs ------------------ */
+  function num(id, min, max, fallback) {
+    const v = parseFloat($(id).value);
+    if (!isFinite(v)) return fallback;
+    return Math.max(min, Math.min(max, v));
+  }
+  function readInputs() {
+    const planKey = document.querySelector('input[name="plan"]:checked').value;
+    return {
+      planKey,
+      plan: RATES_CONFIG.plans[planKey],
+      rpi: num('rpi', 0, 15, RATES_CONFIG.currentRPI),
+      balance: num('balance', 0, 500000, 0),
+      salary: num('salary', 0, 1000000, 0),
+      repayStartYear: Math.round(num('startYear', 1985, 2032, CURRENT_YEAR)),
+      spareMonthly: num('spare', 0, 10000, 0),
+      lumpSum: num('lump', 0, 500000, 0),
+      salaryGrowth: num('salGrowth', 0, 20, 3.5),
+      investReturn: num('ret', 0, 20, 5),
+      currentYear: CURRENT_YEAR
+    };
+  }
+
+  /* ------------------ verdict + prose ------------------ */
+  function setVerdict(res, inputs) {
+    const potA = res.overpay.points[res.horizon].pot;
+    const potB = res.invest.points[res.horizon].pot;
+    const diff = res.wealthDiff;
+    const closeBand = Math.max(250, 0.02 * Math.max(potA, potB));
+    const endLabel = monthLabel(res.horizon);
+    const writeOffYear = yearOfMonth(res.monthsUntilWriteOff);
+
+    const chip = $('recChip'), head = $('verdictHead'), hero = $('verdictHero'),
+          cap = $('verdictHeroCap'), tip = $('tippingLine');
+
+    let rec;
+    if (Math.abs(diff) <= closeBand) rec = 'close';
+    else rec = diff < 0 ? 'invest' : 'overpay';
+
+    chip.className = 'rec-chip ' + rec;
+    if (rec === 'invest') {
+      chip.textContent = 'Invest it';
+      head.textContent = res.overpay.writtenOff > 0
+        ? 'Invest it — overpaying this loan would be throwing money away.'
+        : 'Investing looks like the better deal for you.';
+      hero.textContent = fmtRough(-diff) + ' better off';
+      cap.textContent = 'by ' + endLabel + ', investing instead of overpaying — on your assumptions';
+    } else if (rec === 'overpay') {
+      chip.textContent = 'Overpay it';
+      head.textContent = 'Overpaying looks like the better deal for you.';
+      hero.textContent = fmtRough(diff) + ' better off';
+      cap.textContent = 'by ' + endLabel + ', overpaying instead of investing — on your assumptions';
+    } else {
+      chip.textContent = 'Too close to call';
+      head.textContent = 'It’s close — either choice is reasonable on these numbers.';
+      hero.textContent = fmtRough(Math.abs(diff));
+      cap.textContent = 'is all that separates the two strategies by ' + endLabel;
+    }
+
+    if (res.breakEven === null) {
+      tip.textContent = 'The tipping point: there isn’t one — even a 0% investment return beats overpaying here, because whatever you don’t clear is written off in ' + writeOffYear + ' anyway.';
+    } else if (res.breakEven === Infinity) {
+      tip.textContent = 'The tipping point: overpaying wins unless your investments returned more than 20% a year — which would be extraordinary.';
+    } else {
+      tip.textContent = 'The tipping point: investing wins if your returns average above '
+        + res.breakEven.toFixed(1) + '% a year; overpaying wins below that. You assumed '
+        + inputs.investReturn + '%.';
+    }
+  }
+
+  function setSummary(res) {
+    const t = $('summaryTable');
+    t.textContent = '';
+    const H = res.horizon;
+    const scens = { overpay: res.overpay, invest: res.invest };
+
+    const thead = document.createElement('tr');
+    thead.appendChild(document.createElement('th'));
+    SCEN.forEach(s => {
+      const th = document.createElement('th');
+      const k = document.createElement('span'); k.className = 'key'; k.style.background = s.color;
+      th.appendChild(k);
+      th.appendChild(document.createTextNode(s.name));
+      thead.appendChild(th);
+    });
+    t.appendChild(thead);
+
+    function row(label, fn) {
+      const tr = document.createElement('tr');
+      const td0 = document.createElement('td'); td0.textContent = label;
+      tr.appendChild(td0);
+      SCEN.forEach(s => {
+        const td = document.createElement('td');
+        fn(td, scens[s.key]);
+        tr.appendChild(td);
+      });
+      t.appendChild(tr);
+    }
+
+    row('Loan gone', (td, sc) => {
+      td.textContent = monthLabel(sc.loanEndMonth) + ' ';
+      const small = document.createElement('small');
+      small.textContent = sc.writtenOff > 0 ? '(written off)' : '(paid off)';
+      td.appendChild(small);
+    });
+    row('Total paid to the SLC', (td, sc) => { td.textContent = fmtGBP(sc.points[H].totalPaid); });
+    row('Debt cancelled at write-off', (td, sc) => { td.textContent = sc.writtenOff > 0 ? fmtGBP(sc.writtenOff) : '—'; });
+    row('Wealth by ' + monthLabel(H), (td, sc) => { td.textContent = fmtGBP(sc.points[H].pot); });
+  }
+
+  function setMeaning(res, inputs) {
+    const body = $('meaningBody');
+    body.textContent = '';
+    const add = (txt) => { const p = document.createElement('p'); p.textContent = txt; body.appendChild(p); };
+    const writeOffYear = yearOfMonth(res.monthsUntilWriteOff);
+    const ratePct = (Engine.planInterestRate(inputs.plan, inputs.salary, 1, inputs.rpi)).toFixed(1);
+
+    if (res.invest.writtenOff > 0 && res.overpay.writtenOff > 0) {
+      add('On these numbers you never clear the loan — even with the extra payments — so ' + fmtGBP(res.overpay.writtenOff) + ' of debt would still be cancelled in ' + writeOffYear + '. Until then the loan behaves like an extra tax on income: what you owe doesn’t change what you repay each month. Every pound of voluntary overpayment goes to a balance that was going to be written off anyway.');
+    } else if (res.invest.writtenOff > 0) {
+      add('Overpaying gets you debt-free by ' + monthLabel(res.overpay.loanEndMonth) + '. Without it, you’d still owe ' + fmtGBP(res.invest.writtenOff) + ' when the loan is written off in ' + writeOffYear + '. The simulation weighs the interest you’d avoid (your rate today is about ' + ratePct + '%) against the ' + inputs.investReturn + '% a year your investments are assumed to earn.');
+    } else {
+      add('You’re on track to clear this loan either way — by ' + monthLabel(res.overpay.loanEndMonth) + ' if you overpay, or ' + monthLabel(res.invest.loanEndMonth) + ' if you don’t. So this is a straight race: the loan’s interest (about ' + ratePct + '% today) against the ' + inputs.investReturn + '% a year your investments are assumed to earn.');
+    }
+    add('Both strategies are compared fairly: once the loan is gone, the money that used to go into repayments gets invested too. The verdict compares your total wealth at the point the last loan disappears.');
+    add('Before doing either, the usual order of priorities is: clear expensive debt (credit cards, overdrafts), keep an emergency fund of 3–6 months’ costs, and take any employer pension matching — those tend to beat both options.');
+  }
+
+  function setYearlyTable(res) {
+    const t = $('yearlyTable');
+    t.textContent = '';
+    const tr = document.createElement('tr');
+    ['Year', 'Loan — overpaying', 'Loan — investing', 'Wealth — overpaying', 'Wealth — investing'].forEach(h => {
+      const th = document.createElement('th'); th.textContent = h; tr.appendChild(th);
+    });
+    t.appendChild(tr);
+    for (let m = 0; m <= res.horizon; m += 12) {
+      const r = document.createElement('tr');
+      const cells = [
+        String(yearOfMonth(m)),
+        fmtGBP(res.overpay.points[m].balance),
+        fmtGBP(res.invest.points[m].balance),
+        fmtGBP(res.overpay.points[m].pot),
+        fmtGBP(res.invest.points[m].pot)
+      ];
+      cells.forEach(c => { const td = document.createElement('td'); td.textContent = c; r.appendChild(td); });
+      t.appendChild(r);
+    }
+  }
+
+  /* ------------------ main render ------------------ */
+  let lastResult = null, lastInputs = null;
+
+  function recompute() {
+    const inputs = readInputs();
+    const notice = $('noticeCard'), results = $('results');
+
+    if (inputs.balance <= 0) {
+      notice.textContent = 'Enter your loan balance above to see the comparison.';
+      notice.hidden = false; results.hidden = true; return;
+    }
+    if (inputs.spareMonthly <= 0 && inputs.lumpSum <= 0) {
+      notice.textContent = 'Enter some spare money each month (or a one-off lump sum under “Adjust assumptions”) — that’s the money the two strategies compete for.';
+      notice.hidden = false; results.hidden = true; return;
+    }
+
+    const res = Engine.simulate(inputs);
+    if (res.alreadyWrittenOff) {
+      notice.textContent = 'Good news: based on that start year, your ' + inputs.plan.label + ' loan should already have been written off (' + inputs.plan.writeOffYears + ' years after repayments began). Contact the SLC if you’re still being charged.';
+      notice.hidden = false; results.hidden = true; return;
+    }
+
+    notice.hidden = true; results.hidden = false;
+    lastResult = res; lastInputs = inputs;
+
+    setVerdict(res, inputs);
+    setSummary(res);
+    setMeaning(res, inputs);
+    setYearlyTable(res);
+    renderCharts();
+  }
+
+  function renderCharts() {
+    if (!lastResult) return;
+    const res = lastResult;
+    const H = res.horizon;
+    const slice = (sc, key) => sc.points.slice(0, H + 1).map(pt => pt[key]);
+    const wroteOff = res.overpay.writtenOff > 0 || res.invest.writtenOff > 0;
+    const marker = wroteOff ? { m: res.monthsUntilWriteOff, label: 'written off' } : null;
+
+    renderLegend($('loanLegend'));
+    renderLineChart($('loanChart'), {
+      months: H,
+      marker,
+      ariaLabel: 'Line chart of projected loan balance over time under both strategies. Use arrow keys to read values.',
+      series: [
+        { name: SCEN[0].name, color: SCEN[0].color, values: slice(res.overpay, 'balance') },
+        { name: SCEN[1].name, color: SCEN[1].color, values: slice(res.invest, 'balance') }
+      ]
+    });
+
+    renderLegend($('wealthLegend'));
+    renderLineChart($('wealthChart'), {
+      months: H,
+      marker: null,
+      ariaLabel: 'Line chart of projected wealth over time under both strategies. Use arrow keys to read values.',
+      series: [
+        { name: SCEN[0].name, color: SCEN[0].color, values: slice(res.overpay, 'pot') },
+        { name: SCEN[1].name, color: SCEN[1].color, values: slice(res.invest, 'pot') }
+      ]
+    });
+
+    renderLegend($('totalsLegend'));
+    $('bottomSub').textContent = 'Totals by ' + monthLabel(H) + ', when the last loan is gone';
+    renderBars($('totalsChart'), [
+      {
+        label: 'Total paid to the Student Loans Company',
+        rows: SCEN.map(s => ({ name: s.name, color: s.color, value: (s.key === 'overpay' ? res.overpay : res.invest).points[H].totalPaid }))
+      },
+      {
+        label: 'Your wealth at the end',
+        rows: SCEN.map(s => ({ name: s.name, color: s.color, value: (s.key === 'overpay' ? res.overpay : res.invest).points[H].pot }))
+      }
+    ], 'Bar chart comparing totals paid and final wealth under both strategies.');
+  }
+
+  /* ------------------ wiring ------------------ */
+  let debounceTimer = null;
+  function scheduleRecompute() {
+    clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(recompute, 120);
+  }
+  document.querySelectorAll('input').forEach(el => {
+    el.addEventListener('input', scheduleRecompute);
+    el.addEventListener('change', scheduleRecompute);
+  });
+
+  // re-render charts on container resize (throttled by rAF)
+  let lastWidth = 0, rafPending = false;
+  new ResizeObserver(() => {
+    const w = $('loanChart').clientWidth;
+    if (w && w !== lastWidth && !rafPending) {
+      lastWidth = w;
+      rafPending = true;
+      requestAnimationFrame(() => { rafPending = false; renderCharts(); });
+    }
+  }).observe($('results'));
+
+  // let a parent WordPress page auto-size the iframe
+  function postHeight() {
+    if (window.parent === window) return;
+    window.parent.postMessage({ type: 'slcalc-height', height: document.documentElement.scrollHeight }, '*');
+  }
+  new ResizeObserver(postHeight).observe(document.body);
+
+  $('ratesLine').textContent = 'Thresholds and rates: ' + RATES_CONFIG.taxYear + ' tax year, RPI '
+    + RATES_CONFIG.currentRPI + '%, verified ' + RATES_CONFIG.lastVerified
+    + '. Plan write-offs modelled: 25 years (Plan 1), 30 (Plans 2, 4 and Postgraduate), 40 (Plan 5).';
+
+  recompute();
+})();
+</script>
+</body>
+</html>

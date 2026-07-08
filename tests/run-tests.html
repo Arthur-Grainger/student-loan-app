@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Engine tests</title>
+<style>
+  body { font-family: ui-monospace, Consolas, monospace; font-size: 13px; padding: 16px; background: #fcfcfb; }
+  .pass { color: #006300; } .fail { color: #c22; font-weight: bold; }
+</style>
+</head>
+<!-- data-palette documents the two chart series colours; a palette validator can
+     read it from here if the colours are ever changed (they were validated for
+     colour-vision-deficiency separation and contrast in July 2026) -->
+<body data-palette="#2a78d6,#1baf7a">
+<h1>Engine tests</h1>
+<div id="out">Running…</div>
+<script>
+(async () => {
+  const outEl = document.getElementById('out');
+  outEl.textContent = '';
+  let failures = 0, count = 0;
+  const report = (name, cond, detail) => {
+    count++;
+    if (!cond) failures++;
+    const line = document.createElement('div');
+    line.className = cond ? 'pass' : 'fail';
+    line.textContent = (cond ? 'PASS' : 'FAIL') + ' — ' + name + (cond ? '' : ' :: ' + detail);
+    outEl.appendChild(line);
+    console.log(line.textContent);
+  };
+  const approx = (a, b, eps) => Math.abs(a - b) <= (eps === undefined ? 0.01 : eps);
+
+  try {
+    // Pull the CONFIG and ENGINE blocks straight out of the real app, so the
+    // tests always exercise the shipped code.
+    const html = await (await fetch('../index.html')).text();
+    const grab = (startTag, endTag) => {
+      const i = html.indexOf(startTag);
+      const j = html.indexOf(endTag);
+      if (i < 0 || j < 0) throw new Error('marker not found: ' + startTag);
+      return html.slice(html.indexOf('\n', i) + 1, html.lastIndexOf('\n', j));
+    };
+    const src = grab('CONFIG START', 'CONFIG END') + '\n' + grab('ENGINE START', 'ENGINE END');
+    const { RATES_CONFIG, Engine } = new Function(src + '\nreturn { RATES_CONFIG, Engine };')();
+
+    const P = RATES_CONFIG.plans;
+    const YEAR = 2026;
+    const baseInputs = {
+      plan: P.plan2, rpi: 3.2, balance: 48000, salary: 35000,
+      repayStartYear: 2019, currentYear: YEAR,
+      spareMonthly: 100, lumpSum: 0, salaryGrowth: 3.5, investReturn: 5
+    };
+
+    // --- config sanity (2026/27, verified July 2026) ---
+    report('Plan 1 threshold £26,900', P.plan1.threshold === 26900, P.plan1.threshold);
+    report('Plan 2 threshold £29,385', P.plan2.threshold === 29385, P.plan2.threshold);
+    report('Plan 4 threshold £33,795', P.plan4.threshold === 33795, P.plan4.threshold);
+    report('Plan 5 threshold £25,000', P.plan5.threshold === 25000, P.plan5.threshold);
+    report('Postgrad threshold £21,000 at 6%', P.postgrad.threshold === 21000 && P.postgrad.repayRate === 0.06, JSON.stringify(P.postgrad));
+    report('Write-offs 25/30/30/40/30', [P.plan1, P.plan2, P.plan4, P.plan5, P.postgrad].map(p => p.writeOffYears).join() === '25,30,30,40,30');
+
+    // --- interest formulas ---
+    report('Plan 1 interest = RPI', Engine.planInterestRate(P.plan1, 99999, 1, 3.2) === 3.2);
+    report('Postgrad interest = RPI + 3', Engine.planInterestRate(P.postgrad, 25000, 1, 3.2) === 6.2);
+    report('Plan 2 interest at lower band = RPI', Engine.planInterestRate(P.plan2, 29385, 1, 3.2) === 3.2);
+    report('Plan 2 interest at upper band = RPI + 3', Engine.planInterestRate(P.plan2, 52885, 1, 3.2) === 6.2);
+    report('Plan 2 interest tapers (midpoint = RPI + 1.5)',
+      approx(Engine.planInterestRate(P.plan2, (29385 + 52885) / 2, 1, 3.2), 4.7),
+      Engine.planInterestRate(P.plan2, (29385 + 52885) / 2, 1, 3.2));
+    report('Plan 2 bands uprate with scale',
+      approx(Engine.planInterestRate(P.plan2, 29385 * 1.5, 1.5, 3.2), 3.2),
+      Engine.planInterestRate(P.plan2, 29385 * 1.5, 1.5, 3.2));
+
+    // --- write-off timing: Plan 2 from 2019 → written off 276 months from 2026 ---
+    {
+      const r = Engine.simulate({ ...baseInputs, salary: 25000, spareMonthly: 0, lumpSum: 1 });
+      report('Write-off lands 276 months out ((2019+30−2026)×12)',
+        r.invest.loanEndMonth === 276, r.invest.loanEndMonth);
+      report('Balance written off exceeds start (interest accrued, no repayments)',
+        r.invest.writtenOff > 48000, r.invest.writtenOff);
+      report('No repayments when salary below threshold',
+        r.invest.totalPaid === 0, r.invest.totalPaid);
+    }
+
+    // --- mandatory repayment maths: (35000 − 29385) × 9% / 12 = £42.11 ---
+    {
+      const r = Engine.simulate({ ...baseInputs, spareMonthly: 0, lumpSum: 1 });
+      report('First month mandatory repayment = £42.11',
+        approx(r.invest.points[1].totalPaid, 42.1125), r.invest.points[1].totalPaid);
+    }
+
+    // --- overpaying clears sooner and pays less in total ---
+    {
+      const r = Engine.simulate({ ...baseInputs, balance: 5000, salary: 60000, spareMonthly: 500 });
+      report('Overpaying clears the loan sooner',
+        r.overpay.loanEndMonth < r.invest.loanEndMonth,
+        r.overpay.loanEndMonth + ' vs ' + r.invest.loanEndMonth);
+      report('Overpaying pays less to the SLC in total (less interest)',
+        r.overpay.totalPaid < r.invest.totalPaid && r.overpay.totalPaid >= 5000,
+        r.overpay.totalPaid + ' vs ' + r.invest.totalPaid);
+      report('Neither scenario written off', r.overpay.writtenOff === 0 && r.invest.writtenOff === 0);
+    }
+
+    // --- pure write-off regime: overpaid money vanishes, invested money doesn't ---
+    {
+      const r = Engine.simulate({
+        ...baseInputs, salary: 25000, salaryGrowth: 0, rpi: 0, investReturn: 0,
+        spareMonthly: 100
+      });
+      report('Invest pot = £100 × 276 months at 0% return',
+        approx(r.invest.points[276].pot, 27600), r.invest.points[276].pot);
+      report('Overpay pot = £0 (all spare swallowed by doomed loan)',
+        approx(r.overpay.points[276].pot, 0), r.overpay.points[276].pot);
+      report('Wealth difference = −£27,600', approx(r.wealthDiff, -27600), r.wealthDiff);
+      report('Break-even return is null (overpaying can never win)', r.breakEven === null, String(r.breakEven));
+      report('Written-off amount = 40000 − 27600 (0% interest)',
+        approx(r.overpay.writtenOff, 48000 - 27600, 0.5), r.overpay.writtenOff);
+    }
+
+    // --- lump sum ---
+    {
+      const r = Engine.simulate({ ...baseInputs, balance: 1000, spareMonthly: 0, lumpSum: 5000 });
+      report('Lump sum clears the loan at month 0', r.overpay.loanEndMonth === 0);
+      report('Only the balance goes to the SLC; the rest is invested',
+        approx(r.overpay.totalPaid, 1000) && approx(r.overpay.points[0].pot, 4000),
+        r.overpay.totalPaid + ' / ' + r.overpay.points[0].pot);
+      report('Invest scenario pots the whole lump sum', approx(r.invest.points[0].pot, 5000), r.invest.points[0].pot);
+    }
+
+    // --- repayments starting in the future (Plan 5 grad) ---
+    {
+      const r = Engine.simulate({
+        ...baseInputs, plan: P.plan5, repayStartYear: 2028, salary: 40000, spareMonthly: 0, lumpSum: 1
+      });
+      report('Plan 5 write-off horizon = (2028+40−2026)×12 = 504', r.monthsUntilWriteOff === 504, r.monthsUntilWriteOff);
+      report('No mandatory repayments before the start year',
+        r.invest.points[24].totalPaid === 0, r.invest.points[24].totalPaid);
+      report('Repayments begin after the start year',
+        r.invest.points[25].totalPaid > 0, r.invest.points[25].totalPaid);
+    }
+
+    // --- already written off ---
+    {
+      const r = Engine.simulate({ ...baseInputs, plan: P.plan1, repayStartYear: 1998 });
+      report('Loan past its write-off date is flagged', r.alreadyWrittenOff === true);
+    }
+
+    const summary = failures === 0
+      ? 'ALL ' + count + ' TESTS PASS'
+      : failures + ' of ' + count + ' TESTS FAILED';
+    const h = document.createElement('h2');
+    h.className = failures ? 'fail' : 'pass';
+    h.textContent = summary;
+    outEl.appendChild(h);
+    console.log('TEST SUMMARY: ' + summary);
+    document.title = failures ? 'FAIL' : 'PASS';
+  } catch (err) {
+    document.title = 'FAIL';
+    const h = document.createElement('h2');
+    h.className = 'fail';
+    h.textContent = 'HARNESS ERROR: ' + err.message;
+    outEl.appendChild(h);
+    console.error('HARNESS ERROR', err);
+  }
+})();
+</script>
+</body>
+</html>
